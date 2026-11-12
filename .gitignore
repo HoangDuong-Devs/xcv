@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+weights/*.pt
+weights/*.pth
+weights/*.onnx
+!weights/.gitkeep
+*.log
+.DS_Store
+
+# demo images are private data, keep local only
+demo_samples/*
+!demo_samples/.gitkeep

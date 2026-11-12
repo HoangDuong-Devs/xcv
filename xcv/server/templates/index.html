@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>xcv — Explainable Computer Vision Studio</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #0b1120; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .navbar-custom { background: #111827; border-bottom: 1px solid #1e293b; }
+        .card-custom { background: #111827; border: 1px solid #1e293b; border-radius: 12px; }
+        .sidebar { background: #111827; border-right: 1px solid #1e293b; min-height: calc(100vh - 58px); }
+        .case-item { cursor: pointer; transition: all 0.18s; border-left: 3px solid transparent; background: transparent; border-color: #1e293b; }
+        .case-item:hover, .case-item.active { background: #1e293b; border-left-color: #38bdf8; }
+        .badge-fp { background: #ef4444; color: #fff; }
+        .badge-tp { background: #f59e0b; color: #000; }
+        .badge-clean { background: #10b981; color: #fff; }
+        .img-viewport { position: relative; width: 320px; height: 320px; border-radius: 8px; overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,0.5); background: #000; }
+        .img-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
+        .slider-control { accent-color: #38bdf8; }
+        .score-pill { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; }
+        .guide-box { background: #090d16; border: 1px solid #1e293b; padding: 12px 16px; border-radius: 8px; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+    <!-- Top Bar -->
+    <nav class="navbar navbar-dark navbar-custom px-3 py-2">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <span class="navbar-brand fw-bold text-info mb-0">🔬 xcv <span class="text-secondary fw-normal small ms-1">Explainable Computer Vision</span></span>
+            <div class="d-flex gap-3 align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <label class="small text-secondary text-nowrap">Model:</label>
+                    <select id="modelSelect" class="form-select form-select-sm bg-dark text-light border-secondary" style="min-width: 260px;"></select>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <label class="small text-secondary text-nowrap">Method:</label>
+                    <select id="methodSelect" class="form-select form-select-sm bg-dark text-light border-secondary"></select>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Left Sidebar -->
+            <div class="col-md-3 p-3 sidebar">
+                <div id="modelDesc" class="small text-secondary mb-3"></div>
+
+                <div class="mb-3">
+                    <label class="form-label text-info small fw-bold">Tải ảnh bất kỳ lên để phân tích:</label>
+                    <input type="file" id="fileUpload" class="form-control form-control-sm bg-dark text-light border-secondary" accept="image/*">
+                </div>
+
+                <div class="text-uppercase small fw-bold text-muted mb-2">Demo Samples</div>
+                <div id="caseList" class="list-group list-group-flush"></div>
+            </div>
+
+            <!-- Main Diagnostic Panel -->
+            <div class="col-md-9 p-4">
+                <div class="card card-custom p-4">
+                    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+                        <div>
+                            <h4 id="caseTitle" class="fw-bold mb-1">Sẵn sàng</h4>
+                            <p id="caseDesc" class="text-secondary small mb-0">Chọn một ảnh mẫu ở cột trái hoặc tải ảnh lên.</p>
+                        </div>
+                        <div id="targetButtons" class="d-flex flex-wrap gap-2"></div>
+                    </div>
+
+                    <!-- Dynamic Prediction Scores -->
+                    <div id="scoresContainer" class="row g-2 mb-4"></div>
+
+                    <!-- Image vs CAM Viewport -->
+                    <div class="row g-4 align-items-center mb-4">
+                        <div class="col-md-6 text-center">
+                            <div class="fw-bold mb-2 text-muted small text-uppercase">Ảnh đầu vào (Preprocessed)</div>
+                            <div class="img-viewport mx-auto">
+                                <img id="origImg" class="img-layer" src="" alt="Input">
+                            </div>
+                        </div>
+                        <div class="col-md-6 text-center">
+                            <div class="fw-bold mb-2 text-info small text-uppercase">CAM Attribution Heatmap</div>
+                            <div class="img-viewport mx-auto">
+                                <img id="bgImg" class="img-layer" src="" alt="Base">
+                                <img id="camImg" class="img-layer" src="" alt="Heatmap" style="opacity: 0.65;">
+                            </div>
+                            <div class="mt-3 px-4">
+                                <label class="small text-muted mb-1 d-flex justify-content-between">
+                                    <span>Heatmap Opacity:</span>
+                                    <span id="opacityVal" class="fw-bold text-info">65%</span>
+                                </label>
+                                <input type="range" class="form-range slider-control" min="0" max="100" value="65" id="opacitySlider">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Diagnostic Guide -->
+                    <div class="guide-box text-light">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="text-info fw-bold">📍 Đỉnh kích hoạt (Hotspot): <span id="hotspotDesc" class="text-warning">--</span></span>
+                            <span id="camBadge" class="badge bg-secondary">GradCAM</span>
+                        </div>
+                        <div class="text-secondary">
+                            • <span class="text-danger fw-bold">Vùng Đỏ/Vàng</span> là vùng có gradient đóng góp mạnh nhất cho nhãn đang soi. 
+                            • <span class="text-primary fw-bold">Vùng Xanh Đậm</span> là vùng mạng không quan tâm.<br>
+                            • Kéo thanh <strong>Heatmap Opacity</strong> để kiểm tra xem mạng có đang <em>học tắt (shortcut learning)</em> vào nền/viền thay vì đặc trưng thực sự hay không.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let meta = null;
+        let currentModelId = "card_quality_2c";
+        let currentMethod = "GradCAM";
+        let currentTargetCls = 1;
+        let currentCaseId = null;
+        let isUploadMode = false;
+        let lastUploadFile = null;
+
+        async function init() {
+            const res = await fetch("/api/meta");
+            meta = await res.json();
+            currentModelId = meta.default_model;
+
+            const mSel = document.getElementById("modelSelect");
+            mSel.innerHTML = "";
+            meta.models.forEach(m => {
+                const opt = document.createElement("option");
+                opt.value = m.id;
+                opt.innerText = m.display_name;
+                mSel.appendChild(opt);
+            });
+            mSel.value = currentModelId;
+            mSel.onchange = () => onModelChanged(mSel.value);
+
+            const cSel = document.getElementById("methodSelect");
+            cSel.innerHTML = "";
+            meta.cam_methods.forEach(name => {
+                const opt = document.createElement("option");
+                opt.value = name;
+                opt.innerText = name;
+                cSel.appendChild(opt);
+            });
+            cSel.value = currentMethod;
+            cSel.onchange = () => {
+                currentMethod = cSel.value;
+                refreshAnalysis();
+            };
+
+            onModelChanged(currentModelId);
+        }
+
+        async function onModelChanged(modelId) {
+            currentModelId = modelId;
+            const modelInfo = meta.models.find(m => m.id === modelId);
+            document.getElementById("modelDesc").innerText = modelInfo.description || "";
+
+            // Build target class toggle buttons
+            const btnBox = document.getElementById("targetButtons");
+            btnBox.innerHTML = "";
+            currentTargetCls = modelInfo.class_names.length > 1 ? 1 : 0;
+
+            modelInfo.class_names.forEach((clsName, idx) => {
+                const btn = document.createElement("button");
+                btn.id = `targetBtn-${idx}`;
+                btn.className = idx === currentTargetCls ? "btn btn-sm btn-info fw-bold text-dark" : "btn btn-sm btn-outline-secondary text-light";
+                btn.innerText = `Soi: ${clsName}`;
+                btn.onclick = () => {
+                    currentTargetCls = idx;
+                    updateTargetButtonStyles();
+                    refreshAnalysis();
+                };
+                btnBox.appendChild(btn);
+            });
+
+            // Load demo cases for this adapter
+            const res = await fetch(`/api/cases?model_id=${currentModelId}`);
+            const cases = await res.json();
+            const list = document.getElementById("caseList");
+            list.innerHTML = "";
+            if (cases.length === 0) {
+                list.innerHTML = '<div class="text-secondary small p-2">Không có mẫu demo dựng sẵn. Hãy tải ảnh lên ở trên!</div>';
+                currentCaseId = null;
+                return;
+            }
+
+            cases.forEach(c => {
+                const badge = c.tag === "fp" ? '<span class="badge badge-fp">FP</span>' :
+                             (c.tag === "tp" ? '<span class="badge badge-tp">TP</span>' :
+                             '<span class="badge badge-clean">Clean</span>');
+                const item = document.createElement("div");
+                item.className = "list-group-item case-item p-2 text-light";
+                item.id = `case-${c.id}`;
+                item.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center">
+                        <strong class="small">${c.id}</strong>
+                        ${badge}
+                    </div>
+                    <div class="text-secondary" style="font-size: 0.75rem;">${c.title}</div>
+                `;
+                item.onclick = () => {
+                    isUploadMode = false;
+                    currentCaseId = c.id;
+                    currentTargetCls = c.default_target_cls;
+                    updateTargetButtonStyles();
+                    selectCaseUI(c.id);
+                    refreshAnalysis();
+                };
+                list.appendChild(item);
+            });
+
+            // Auto select first case
+            isUploadMode = false;
+            currentCaseId = cases[0].id;
+            currentTargetCls = cases[0].default_target_cls;
+            updateTargetButtonStyles();
+            selectCaseUI(currentCaseId);
+            refreshAnalysis();
+        }
+
+        function updateTargetButtonStyles() {
+            const modelInfo = meta.models.find(m => m.id === currentModelId);
+            modelInfo.class_names.forEach((_, idx) => {
+                const btn = document.getElementById(`targetBtn-${idx}`);
+                if (btn) {
+                    btn.className = idx === currentTargetCls ? "btn btn-sm btn-info fw-bold text-dark" : "btn btn-sm btn-outline-secondary text-light";
+                }
+            });
+        }
+
+        function selectCaseUI(caseId) {
+            document.querySelectorAll(".case-item").forEach(el => el.classList.remove("active"));
+            const el = document.getElementById(`case-${caseId}`);
+            if (el) el.classList.add("active");
+        }
+
+        async function refreshAnalysis() {
+            if (isUploadMode && lastUploadFile) {
+                const fd = new FormData();
+                fd.append("file", lastUploadFile);
+                fd.append("model_id", currentModelId);
+                fd.append("target_cls", currentTargetCls);
+                fd.append("method", currentMethod);
+                const res = await fetch("/api/analyze_upload", { method: "POST", body: fd });
+                renderResult(await res.json());
+            } else if (currentCaseId) {
+                const res = await fetch(`/api/analyze_case?model_id=${currentModelId}&case_id=${currentCaseId}&target_cls=${currentTargetCls}&method=${currentMethod}`);
+                renderResult(await res.json());
+            }
+        }
+
+        function renderResult(data) {
+            if (data.error) return;
+            document.getElementById("caseTitle").innerText = data.case_info.title;
+            document.getElementById("caseDesc").innerText = data.case_info.desc;
+
+            // Render dynamic class score pills
+            const container = document.getElementById("scoresContainer");
+            container.innerHTML = "";
+            for (const [cls, score] of Object.entries(data.scores)) {
+                const pct = (score * 100).toFixed(1);
+                const isTarget = (cls === data.target_class);
+                const col = document.createElement("div");
+                col.className = "col-md-4 col-sm-6";
+                col.innerHTML = `
+                    <div class="score-pill ${isTarget ? 'border-info' : ''}">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="small ${isTarget ? 'text-info fw-bold' : 'text-secondary'}">${cls}</span>
+                            <span class="fw-bold ${score > 0.65 ? 'text-danger' : 'text-success'}">${pct}%</span>
+                        </div>
+                        <div class="progress" style="height: 5px; background: #0f172a;">
+                            <div class="progress-bar ${score > 0.65 ? 'bg-danger' : 'bg-success'}" style="width: ${pct}%"></div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(col);
+            }
+
+            document.getElementById("origImg").src = "data:image/jpeg;base64," + data.orig_b64;
+            document.getElementById("bgImg").src = "data:image/jpeg;base64," + data.orig_b64;
+            document.getElementById("camImg").src = "data:image/jpeg;base64," + data.heat_b64;
+            document.getElementById("hotspotDesc").innerText = `${data.hotspot_desc} (x=${data.peak_x}, y=${data.peak_y})`;
+            document.getElementById("camBadge").innerText = data.method;
+        }
+
+        document.getElementById("opacitySlider").oninput = function () {
+            document.getElementById("opacityVal").innerText = this.value + "%";
+            document.getElementById("camImg").style.opacity = this.value / 100.0;
+        };
+
+        document.getElementById("fileUpload").onchange = function (e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            isUploadMode = true;
+            lastUploadFile = file;
+            document.querySelectorAll(".case-item").forEach(el => el.classList.remove("active"));
+            refreshAnalysis();
+        };
+
+        window.onload = init;
+    </script>
+</body>
+</html>
